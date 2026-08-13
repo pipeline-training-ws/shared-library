@@ -1,0 +1,13 @@
+{
+    "fields": {
+       "project":
+       {
+          "key": "${JIRA_KEY}"
+       },
+       "summary": "${JIRA_SUMMARY}",
+       "description": "${JIRA_DESCRIPTION}",
+       "issuetype": {
+          "name": "${JIRA_ISSUE_TYPE_NAME}"
+       }
+   }
+}

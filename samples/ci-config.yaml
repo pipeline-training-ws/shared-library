@@ -1,0 +1,9 @@
+app: 'Hello World'
+ci:
+  podyaml: podTemplate-maven.yaml
+  maven:
+    image: docker.io/library/eclipse-temurin:21-jdk-alpine
+    steps:
+      - "mvn version"
+      - "mvn clean install"
+
