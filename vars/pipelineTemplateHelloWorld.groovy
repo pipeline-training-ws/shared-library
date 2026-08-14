@@ -37,7 +37,12 @@ def call(String configFile) {
                     }
                     stage("Hi") {
                         when {
-                            branch 'main'
+                            // env.BRANCH_NAME is only populated by Multibranch/Org-scan jobs.
+                            // Standalone Pipeline jobs (like this one) never set it, so fall back
+                            // to GIT_BRANCH, which the checkout step exports for any job type.
+                            expression {
+                                env.BRANCH_NAME == 'main' || env.GIT_BRANCH == 'origin/main' || env.GIT_BRANCH == 'main'
+                            }
                         }
                         steps {
                             sh "echo Hi ${config.firstName}  ${config.lastName}"
