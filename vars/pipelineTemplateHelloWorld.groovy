@@ -1,4 +1,5 @@
-def call(Map config) {
+def call(String configFile) {
+    Map config = [:]
     pipeline {
         agent none
         options {
@@ -20,6 +21,15 @@ def call(Map config) {
                     }
                 }
                 stages {
+                    stage('Load Config') {
+                        steps {
+                            script {
+                                // readYaml needs a workspace (hudson.FilePath), so it must run
+                                // inside a stage with an agent, not at the top of the Jenkinsfile
+                                config = readYaml(file: configFile).ci
+                            }
+                        }
+                    }
                     stage("Hello World") {
                         steps {
                             sh "echo Hello ${config.hello}"
@@ -34,7 +44,7 @@ def call(Map config) {
                         }
                     }
                 }
-            }            
+            }
         }
     }
 }
