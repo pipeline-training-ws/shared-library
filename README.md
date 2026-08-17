@@ -30,10 +30,8 @@ shared-library/
 ├── vars/                          # Global variables exposed as pipeline steps
 │   ├── pipelineTemplateHelloWorld.groovy
 │   ├── buildMaven.groovy
-│   ├── initPodTemplate.groovy         # unused — see note below
 │   ├── newSemanticVersion.groovy
 │   ├── gitShortCommit.groovy
-│   ├── getGitBranches.groovy          # experimental, not used by any template
 │   ├── jfrogUploadArtifact.groovy
 │   ├── jfrogDownloadArtifact.groovy
 │   ├── jiraCreateIssue.groovy
@@ -41,17 +39,14 @@ shared-library/
 └── resources/                     # Non-Groovy resources accessed via libraryResource()
     ├── podtemplates/
     │   └── agent.yaml             # single-container (maven) pod template
-    ├── jfrog/                     # reference cURL scripts (not wired into the vars/ steps)
-    ├── jira/                      # reference cURL script + payload template (not wired into jiraCreateIssue)
     └── newSemanticVersion/        # semantic versioning shell script, used by newSemanticVersion.groovy
 ```
 
-There is no `pipelineTemplateMaven` step or `templates/` directory in this repository (both were
-removed). `pipelineTemplateHelloWorld` is the only pipeline template shipped here.
+`pipelineTemplateHelloWorld` is the only pipeline template shipped here.
 
 End-to-end usage examples for the JFrog and Jira steps live in the sibling
-[`pipeline-samples/ci-jfrog-integration/`](../pipeline-samples/ci-jfrog-integration) and
-[`pipeline-samples/ci-jira-integration/`](../pipeline-samples/ci-jira-integration) directories, not under `shared-library/`.
+[`pipeline-samples/ci-jfrog-integration/`](https://github.com/pipeline-training-ws/pipeline-samples/tree/main/ci-jfrog-integration) and
+[`pipeline-samples/ci-jira-integration/`](https://github.com/pipeline-training-ws/pipeline-samples/tree/main/ci-jira-integration) directories, not under `shared-library/`.
 
 ---
 
@@ -63,7 +58,6 @@ End-to-end usage examples for the JFrog and Jira steps live in the sibling
 | Kubernetes plugin | Pod-based agents (`kubernetes { }` agent block) |
 | Pipeline Maven plugin | Required by `buildMaven` step |
 | Credentials Plugin | For JFrog and Jira credential bindings |
-| `jq` in agent image | Required by `getGitBranches` step |
 
 ---
 
@@ -89,7 +83,7 @@ Then reference it implicitly from any Jenkinsfile (auto-loaded), or explicitly:
 
 Every Jenkinsfile in this repo actually resolves the library's coordinates from `SHAREDLIB_GIT_*`
 environment variables (defaulted in-line, overridable at folder/controller level) rather than a
-hardcoded identifier — see [`sample-app-helloWorld/Jenkinsfile`](../sample-app-helloWorld/Jenkinsfile)
+hardcoded identifier — see [`sample-app-helloworld/Jenkinsfile`](https://github.com/pipeline-training-ws/sample-app-helloworld/blob/main/Jenkinsfile)
 for the full pattern:
 
 ```groovy
@@ -157,28 +151,6 @@ buildMaven(config)
 ```
 
 > **Tip:** Configure Maven settings globally at the folder level in CloudBees CI to keep credentials out of the Jenkinsfile.
-
----
-
-### `initPodTemplate`
-
-Resolves a Kubernetes pod template YAML named by `config.ci.podyaml` from the library's `resources/podtemplates/` directory and performs token substitution for `${MAVEN_IMAGE}` and `${KANIKO_IMAGE}` using values from the CI config.
-
-```groovy
-// Returns rendered YAML string — used inside an agent block
-agent {
-    kubernetes {
-        yaml initPodTemplate(config)
-        defaultContainer 'maven'
-    }
-}
-```
-
-> ⚠️ **Not currently used by anything in this library.** `initPodTemplate` delegates to a
-> `renderTemplate` helper that is not defined anywhere in `vars/`, and no other step calls
-> `initPodTemplate` (the template that used to call it, `pipelineTemplateMaven`, has been removed).
-> `pipelineTemplateHelloWorld` loads its pod template directly via
-> `libraryResource("podtemplates/agent.yaml")` instead of going through this step.
 
 ---
 
@@ -266,21 +238,11 @@ helloWorld()
 
 ---
 
-### `getGitBranches` *(experimental)*
-
-Fetches branch names for a GitHub repository via the GitHub REST API and sets `env.GIT_REPO_BRANCHES` as a comma-separated list. Requires `jq` in the agent container.
-
-```groovy
-getGitBranches(env.GITHUB_TOKEN, 'https://api.github.com/repos/acme/my-app/branches')
-```
-
----
-
 ## Resources
 
 ### Pod Templates
 
-Located in `resources/podtemplates/`. Loaded directly via `libraryResource()` by `pipelineTemplateHelloWorld` and the `0-helloWorld` template catalog entry. `initPodTemplate` looks for a different, configurable filename (`config.ci.podyaml`) but is currently unused — see the note above.
+Located in `resources/podtemplates/`. Loaded directly via `libraryResource()` by `pipelineTemplateHelloWorld` and the `0-helloWorld` template catalog entry.
 
 | File | Containers | Purpose |
 |---|---|---|
@@ -293,16 +255,8 @@ The pod template follows Kubernetes security best practices:
 
 ### Integration Scripts
 
-Reference shell scripts kept alongside the library for documentation/testing purposes. They are **not**
-invoked by the corresponding `vars/*.groovy` steps — `jfrogUploadArtifact`, `jfrogDownloadArtifact`, and
-`jiraCreateIssue` build and run their own inline `sh` blocks rather than calling these files via
-`libraryResource()`. Only `newSemanticVersion.sh` is actually loaded (by `newSemanticVersion.groovy`).
-
 | Path | Description | Used by a `vars/` step? |
 |---|---|---|
-| `resources/jfrog/uploadArtifact.sh` | cURL-based Artifactory upload | No — standalone reference |
-| `resources/jfrog/downloadArtifact.sh` | cURL-based Artifactory download | No — standalone reference |
-| `resources/jira/createIssue.sh` + `createIssue.json` | cURL-based Jira issue creation | No — standalone reference |
 | `resources/newSemanticVersion/newSemanticVersion.sh` | SemVer bump logic | Yes — `newSemanticVersion.groovy` |
 
 ---
@@ -311,10 +265,10 @@ invoked by the corresponding `vars/*.groovy` steps — `jfrogUploadArtifact`, `j
 
 | Path | Description |
 |---|---|
-| [`../sample-app-helloWorld/`](../sample-app-helloWorld) | Resolves the library from `SHAREDLIB_GIT_*` env vars and calls `pipelineTemplateHelloWorld('ci-config.yaml')`, plus its own `ci-config.yaml` |
-| [`../pipeline-samples/ci-jfrog-integration/`](../pipeline-samples/ci-jfrog-integration) | End-to-end Artifactory upload/download example using `jfrogUploadArtifact`/`jfrogDownloadArtifact` |
-| [`../pipeline-samples/ci-jira-integration/`](../pipeline-samples/ci-jira-integration) | Automated Jira issue creation via `jiraCreateIssue` |
-| [`../template-catalog/templates/`](../template-catalog/templates) | Pipeline Template Catalog entries (`0-helloWorld`, `1-helloWorld-MB`) built on top of this library |
+| [`sample-app-helloworld/`](https://github.com/pipeline-training-ws/sample-app-helloworld) | Resolves the library from `SHAREDLIB_GIT_*` env vars and calls `pipelineTemplateHelloWorld('ci-config.yaml')`, plus its own `ci-config.yaml` |
+| [`pipeline-samples/ci-jfrog-integration/`](https://github.com/pipeline-training-ws/pipeline-samples/tree/main/ci-jfrog-integration) | End-to-end Artifactory upload/download example using `jfrogUploadArtifact`/`jfrogDownloadArtifact` |
+| [`pipeline-samples/ci-jira-integration/`](https://github.com/pipeline-training-ws/pipeline-samples/tree/main/ci-jira-integration) | Automated Jira issue creation via `jiraCreateIssue` |
+| [`template-catalog/templates/`](https://github.com/pipeline-training-ws/template-catalog/tree/main/templates) | Pipeline Template Catalog entries (`0-helloWorld`, `1-helloWorld-MB`) built on top of this library |
 
 ---
 
@@ -334,5 +288,5 @@ Configure the following credentials in Jenkins / CloudBees CI before using the i
 1. Branch from `main` — use `feature/<short-description>` naming.
 2. Add or update the relevant `vars/*.groovy` step.
 3. Place any new shell scripts or YAML resources under `resources/`.
-4. Add a sample Jenkinsfile under `../pipeline-samples/` demonstrating the change.
+4. Add a sample Jenkinsfile under [`pipeline-samples`](https://github.com/pipeline-training-ws/pipeline-samples) demonstrating the change.
 5. Open a Pull Request — pipeline linting runs automatically on PR creation.
