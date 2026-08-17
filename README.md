@@ -8,6 +8,7 @@ A **Jenkins Shared Library** providing reusable pipeline steps, opinionated pipe
 
 ## Table of Contents
 
+- [Architecture](#architecture)
 - [Repository Layout](#repository-layout)
 - [Prerequisites](#prerequisites)
 - [Loading the Library](#loading-the-library)
@@ -20,6 +21,53 @@ A **Jenkins Shared Library** providing reusable pipeline steps, opinionated pipe
 - [Sample Usage](#sample-usage)
 - [Credential Requirements](#credential-requirements)
 - [Contributing](#contributing)
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph AppRepo["Application Repo (e.g. sample-app-helloworld)"]
+        CIConfig["ci-config.yaml"]
+        AppJenkinsfile["Jenkinsfile<br/>@Library('shared-library') _<br/>pipelineTemplateHelloWorld('ci-config.yaml')"]
+    end
+
+    subgraph LibRepo["shared-library Repo"]
+        Vars["vars/ Directory"]
+        PTH["pipelineTemplateHelloWorld.groovy"]
+        BuildMaven["buildMaven.groovy"]
+        NewSemVer["newSemanticVersion.groovy"]
+        GitShortCommit["gitShortCommit.groovy"]
+        JfrogUpload["jfrogUploadArtifact.groovy"]
+        JfrogDownload["jfrogDownloadArtifact.groovy"]
+        JiraCreate["jiraCreateIssue.groovy"]
+        HelloWorldVar["helloWorld.groovy"]
+        Vars --> PTH
+        Vars --> BuildMaven
+        Vars --> NewSemVer
+        Vars --> GitShortCommit
+        Vars --> JfrogUpload
+        Vars --> JfrogDownload
+        Vars --> JiraCreate
+        Vars --> HelloWorldVar
+    end
+
+    subgraph JenkinsServer["Jenkins / CloudBees CI Server"]
+        Loader["Pipeline Loader<br/>(resolves @Library / library step)"]
+        subgraph Engine["pipelineTemplateHelloWorld Execution"]
+            LoadConfig["CI / Load Config<br/>readYaml(file: configFile).ci"] --> Hello["CI / Hello World<br/>echo Hello (hello)"] --> Hi["CI / Hi — main only<br/>echo Hi (firstName) (lastName)"]
+        end
+        Loader --> Engine
+    end
+
+    AppJenkinsfile -- "Loads Jenkinsfile" --> Loader
+    CIConfig -- "configFile path" --> LoadConfig
+    LibRepo -- "@Library('shared-library') _" --> Loader
+    PTH -- "loaded by Pipeline Loader" --> Engine
+```
+
+The `pipelineTemplateHelloWorld` stages shown above match the [Pipeline Templates](#pipelinetemplatehelloworld) section below: `CI / Load Config` runs on every branch, `CI / Hello World` runs on every branch, and `CI / Hi` is gated to `main` only.
 
 ---
 
