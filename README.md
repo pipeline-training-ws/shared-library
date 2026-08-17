@@ -13,7 +13,6 @@ A **Jenkins Shared Library** providing reusable pipeline steps, opinionated pipe
 - [Loading the Library](#loading-the-library)
 - [Pipeline Templates](#pipeline-templates)
   - [pipelineTemplateHelloWorld](#pipelinetemplatehelloworld)
-  - [pipelineTemplateMaven](#pipelinetemplatemaven)
 - [Global Variables (Steps)](#global-variables-steps)
 - [Resources](#resources)
   - [Pod Templates](#pod-templates)
@@ -27,30 +26,33 @@ A **Jenkins Shared Library** providing reusable pipeline steps, opinionated pipe
 ## Repository Layout
 
 ```
-ci-shared-library/
+shared-library/
 ├── vars/                          # Global variables exposed as pipeline steps
 │   ├── pipelineTemplateHelloWorld.groovy
-│   ├── pipelineTemplateMaven.groovy
+│   ├── pipelineTemplateMaven.groovy   # incomplete — see note below
 │   ├── buildMaven.groovy
-│   ├── initPodTemplate.groovy
+│   ├── initPodTemplate.groovy         # incomplete — see note below
 │   ├── newSemanticVersion.groovy
 │   ├── gitShortCommit.groovy
-│   ├── getGitBranches.groovy
+│   ├── getGitBranches.groovy          # experimental, not used by any template
 │   ├── jfrogUploadArtifact.groovy
 │   ├── jfrogDownloadArtifact.groovy
 │   ├── jiraCreateIssue.groovy
 │   └── helloWorld.groovy
 ├── resources/                     # Non-Groovy resources accessed via libraryResource()
-│   ├── podtemplates/              # Kubernetes pod template YAML files
-│   ├── jfrog/                     # JFrog Artifactory shell scripts
-│   ├── jira/                      # Jira REST API helpers
-│   └── newSemanticVersion/        # Semantic versioning shell script
-└── samples/                       # Reference Jenkinsfiles and CI config examples
-    ├── ci-config.yaml
-    ├── JenkinsfileInitConfigSimple.groovy
-    ├── ci-jfrog-integration/
-    └── ci-jira-integration/
+│   ├── podtemplates/
+│   │   └── agent.yaml             # single-container (maven) pod template
+│   ├── jfrog/                     # reference cURL scripts (not wired into the vars/ steps)
+│   ├── jira/                      # reference cURL script + payload template (not wired into jiraCreateIssue)
+│   └── newSemanticVersion/        # semantic versioning shell script, used by newSemanticVersion.groovy
+└── templates/                     # Standalone reference Jenkinsfile(s)
+    └── helloWorld/
+        └── Jenkinsfile            # loads this library and calls pipelineTemplateHelloWorld('ci-config.yaml')
 ```
+
+End-to-end usage examples for the JFrog and Jira steps live in the sibling
+[`pipeline-samples/ci-jfrog-integration/`](../pipeline-samples/ci-jfrog-integration) and
+[`pipeline-samples/ci-jira-integration/`](../pipeline-samples/ci-jira-integration) directories, not under `shared-library/`.
 
 ---
 
@@ -74,22 +76,35 @@ Configure the library once in **Manage Jenkins → System → Global Pipeline Li
 
 | Field | Value |
 |---|---|
-| Name | `ci-shared-library` |
+| Name | `shared-library` |
 | Default version | `main` |
-| SCM | Git — `git@github.com:pipeline-training-ws/shared-library.git` |
+| SCM | Git — `https://github.com/pipeline-training-ws/shared-library.git` |
 
 Then reference it implicitly from any Jenkinsfile (auto-loaded), or explicitly:
 
 ```groovy
-@Library('ci-shared-library') _
+@Library('shared-library') _
 ```
 
 ### Option 2 — Inline `library` step
 
+Every Jenkinsfile in this repo actually resolves the library's coordinates from `SHAREDLIB_GIT_*`
+environment variables (defaulted in-line, overridable at folder/controller level) rather than a
+hardcoded identifier — see [`sample-app-helloWorld/Jenkinsfile`](../sample-app-helloWorld/Jenkinsfile)
+or [`templates/helloWorld/Jenkinsfile`](templates/helloWorld/Jenkinsfile) for the full pattern:
+
 ```groovy
-library identifier: 'ci-shared-library@main', retriever: modernSCM(
+env.SHAREDLIB_GIT_SERVER = env.SHAREDLIB_GIT_SERVER ?: "https://github.com"
+env.SHAREDLIB_GIT_ORG = env.SHAREDLIB_GIT_ORG ?: "pipeline-training-ws"
+env.SHAREDLIB_GIT_REPO = env.SHAREDLIB_GIT_REPO ?: "shared-library"
+env.SHAREDLIB_GIT_TAG_ = env.SHAREDLIB_GIT_TAG ?: "main"
+env.SHAREDLIB_GIT_CREDENTIALS = env.SHAREDLIB_GIT_CREDENTIALS ?: "gh-pat"
+
+library identifier: "${env.SHAREDLIB_GIT_REPO}@${env.SHAREDLIB_GIT_TAG_}", retriever: modernSCM(
     [$class: 'GitSCMSource',
-     remote: 'git@github.com:pipeline-training-ws/shared-library.git'])
+     remote: "${env.SHAREDLIB_GIT_SERVER}/${env.SHAREDLIB_GIT_ORG}/${env.SHAREDLIB_GIT_REPO}.git",
+     credentialsId: "${env.SHAREDLIB_GIT_CREDENTIALS}"
+    ])
 ```
 
 ---
@@ -98,32 +113,35 @@ library identifier: 'ci-shared-library@main', retriever: modernSCM(
 
 ### `pipelineTemplateHelloWorld`
 
-A minimal template that runs a greeting stage on a Kubernetes agent. Designed to validate library loading and pod-template resolution.
+A minimal template that runs a greeting stage on a Kubernetes agent. Designed to validate library loading and pod-template resolution. Takes the **path to a YAML config file** (not a map) and reads its `ci:` block itself.
 
-**Parameters**
+**Parameter**
 
 | Key | Type | Description |
 |---|---|---|
-| `hello` | String | Message printed in the "Hello World" stage |
-| `firstName` | String | First name printed in the "Hi" stage (`main` branch only) |
-| `lastName` | String | Last name printed in the "Hi" stage (`main` branch only) |
+| `configFile` | String | Path to a YAML file (e.g. `ci-config.yaml`) with a `ci:` block containing `hello`, `firstName`, `lastName` |
 
 **Jenkinsfile**
 
 ```groovy
-@Library('ci-shared-library') _
+@Library('shared-library') _
 
-pipelineTemplateHelloWorld(
-    hello    : 'CloudBees CI',
-    firstName: 'Jane',
-    lastName : 'Doe'
-)
+pipelineTemplateHelloWorld('ci-config.yaml')
+```
+
+```yaml
+# ci-config.yaml
+ci:
+  hello: CloudBees CI
+  firstName: Jane
+  lastName: Doe
 ```
 
 **Stages**
 
 | Stage | Branch filter | What it does |
 |---|---|---|
+| CI / Load Config | all | Reads `configFile` via `readYaml(file: configFile).ci` |
 | CI / Hello World | all | `echo Hello <hello>` |
 | CI / Hi | `main` only | `echo Hi <firstName> <lastName>` |
 
@@ -131,26 +149,33 @@ pipelineTemplateHelloWorld(
 
 ### `pipelineTemplateMaven`
 
-An opinionated **CI/CD** template for Maven-based applications running on Kubernetes agents. Reads build configuration from a `ci-config.yaml` file committed alongside the application source.
+An opinionated **CI/CD** template skeleton for Maven-based applications running on Kubernetes agents.
 
-**Stages**
+> ⚠️ **Incomplete / work in progress.** `pipelineTemplateMaven.groovy` calls global steps
+> (`init`, `routerBuild`, `routerBuildImage`) and `initPodTemplate` looks for
+> `podtemplates/podTemplate-init.yaml` — none of these exist yet under `vars/` or
+> `resources/podtemplates/` (only `agent.yaml` is present). Calling this template as-is will
+> fail at the `Init` stage. Treat the stage/parameter shape below as the intended design, not
+> a working example — `pipelineTemplateHelloWorld` is the template that actually runs end to end.
+
+**Stages (intended)**
 
 | Stage | Branch filter | What it does |
 |---|---|---|
-| Init | all | Loads and merges `ci-config.yaml` defaults |
+| Init | all | Loads and merges `ci-config.yaml` defaults (calls the not-yet-implemented `init` step) |
 | CI / build | all | Executes Maven steps via `buildMaven` |
-| CI / Image | `main` only | Builds and pushes container image |
+| CI / Image | `main` only | Builds and pushes container image (calls the not-yet-implemented `routerBuildImage` step) |
 | CI / test | all | Placeholder — add your test commands |
 | CI / qa scans | all | Parallel Sonar + roxctl scans (stubs) |
 | CD / deploy | all | Placeholder — add your deploy commands |
 | CD / test | all | Placeholder — add post-deploy tests |
 
-**`ci-config.yaml` schema (application side)**
+**`ci-config.yaml` schema (application side, intended)**
 
 ```yaml
 app: 'my-app'
 ci:
-  podyaml: podTemplate-maven.yaml      # Pod template from resources/podtemplates/
+  podyaml: podTemplate-init.yaml        # Not currently shipped under resources/podtemplates/
   maven:
     image: docker.io/library/eclipse-temurin:21-jdk-alpine
     steps:
@@ -162,7 +187,7 @@ ci:
 **Jenkinsfile**
 
 ```groovy
-@Library('ci-shared-library') _
+@Library('shared-library') _
 
 pipelineTemplateMaven([:])             # ci-config.yaml is resolved from the branch
 ```
@@ -185,7 +210,7 @@ buildMaven(config)
 
 ### `initPodTemplate`
 
-Resolves a Kubernetes pod template YAML from the library's `resources/podtemplates/` directory and performs token substitution for `${MAVEN_IMAGE}` and `${KANIKO_IMAGE}` using values from the CI config.
+Resolves a Kubernetes pod template YAML named by `config.ci.podyaml` from the library's `resources/podtemplates/` directory and performs token substitution for `${MAVEN_IMAGE}` and `${KANIKO_IMAGE}` using values from the CI config.
 
 ```groovy
 // Returns rendered YAML string — used inside an agent block
@@ -196,6 +221,11 @@ agent {
     }
 }
 ```
+
+> ⚠️ This step delegates to a `renderTemplate` helper that is not currently defined anywhere in
+> `vars/`, and is only ever called (indirectly) by the incomplete `pipelineTemplateMaven` — see the
+> note above. `pipelineTemplateHelloWorld` loads its pod template directly via
+> `libraryResource("podtemplates/agent.yaml")` instead of going through this step.
 
 ---
 
@@ -297,38 +327,42 @@ getGitBranches(env.GITHUB_TOKEN, 'https://api.github.com/repos/acme/my-app/branc
 
 ### Pod Templates
 
-Located in `resources/podtemplates/`. Loaded by `initPodTemplate` or directly via `libraryResource()`.
+Located in `resources/podtemplates/`. Loaded directly via `libraryResource()` (currently only by `pipelineTemplateHelloWorld` and the `0-helloWorld` template catalog entry — `initPodTemplate`/`pipelineTemplateMaven` look for a different, not-yet-shipped file; see the note above).
 
 | File | Containers | Purpose |
 |---|---|---|
-| `podTemplate-agent.yaml` | `maven` (eclipse-temurin:21-jdk-alpine) | General-purpose Java/Maven build agent |
+| `agent.yaml` | `maven` (eclipse-temurin:21-jdk-alpine) | General-purpose Java/Maven build agent |
 
-All pod templates follow Kubernetes security best practices:
+The pod template follows Kubernetes security best practices:
 - `nodeSelector` + `tolerations` to pin workloads to dedicated agent nodes
 - `securityContext.runAsUser: 1000` / `fsGroup: 1000`
 - Explicit `resources.requests` and `resources.limits`
 
 ### Integration Scripts
 
-| Path | Description |
-|---|---|
-| `resources/jfrog/uploadArtifact.sh` | cURL-based Artifactory upload |
-| `resources/jfrog/downloadArtifact.sh` | cURL-based Artifactory download |
-| `resources/jira/createIssue.sh` | cURL-based Jira issue creation |
-| `resources/newSemanticVersion/newSemanticVersion.sh` | SemVer bump logic |
+Reference shell scripts kept alongside the library for documentation/testing purposes. They are **not**
+invoked by the corresponding `vars/*.groovy` steps — `jfrogUploadArtifact`, `jfrogDownloadArtifact`, and
+`jiraCreateIssue` build and run their own inline `sh` blocks rather than calling these files via
+`libraryResource()`. Only `newSemanticVersion.sh` is actually loaded (by `newSemanticVersion.groovy`).
+
+| Path | Description | Used by a `vars/` step? |
+|---|---|---|
+| `resources/jfrog/uploadArtifact.sh` | cURL-based Artifactory upload | No — standalone reference |
+| `resources/jfrog/downloadArtifact.sh` | cURL-based Artifactory download | No — standalone reference |
+| `resources/jira/createIssue.sh` + `createIssue.json` | cURL-based Jira issue creation | No — standalone reference |
+| `resources/newSemanticVersion/newSemanticVersion.sh` | SemVer bump logic | Yes — `newSemanticVersion.groovy` |
 
 ---
 
 ## Sample Usage
 
-The `samples/` directory contains ready-to-use reference implementations:
-
-| File | Description |
+| Path | Description |
 |---|---|
-| `samples/ci-config.yaml` | Minimal CI config for a Maven hello-world app |
-| `samples/JenkinsfileInitConfigSimple.groovy` | Loads library inline, builds a config map, invokes a template |
-| `samples/ci-jfrog-integration/` | End-to-end Artifactory upload/download example |
-| `samples/ci-jira-integration/` | Automated Jira issue creation on build failure |
+| [`templates/helloWorld/Jenkinsfile`](templates/helloWorld/Jenkinsfile) | Standalone Jenkinsfile: resolves the library from `SHAREDLIB_GIT_*` env vars and calls `pipelineTemplateHelloWorld('ci-config.yaml')` |
+| [`../sample-app-helloWorld/`](../sample-app-helloWorld) | A full application repo consuming this library the same way, plus its own `ci-config.yaml` |
+| [`../pipeline-samples/ci-jfrog-integration/`](../pipeline-samples/ci-jfrog-integration) | End-to-end Artifactory upload/download example using `jfrogUploadArtifact`/`jfrogDownloadArtifact` |
+| [`../pipeline-samples/ci-jira-integration/`](../pipeline-samples/ci-jira-integration) | Automated Jira issue creation via `jiraCreateIssue` |
+| [`../template-catalog/templates/`](../template-catalog/templates) | Pipeline Template Catalog entries (`0-helloWorld`, `1-helloWorld-MB`) built on top of this library |
 
 ---
 
@@ -348,5 +382,5 @@ Configure the following credentials in Jenkins / CloudBees CI before using the i
 1. Branch from `main` — use `feature/<short-description>` naming.
 2. Add or update the relevant `vars/*.groovy` step.
 3. Place any new shell scripts or YAML resources under `resources/`.
-4. Add a sample Jenkinsfile under `samples/` demonstrating the change.
+4. Add a sample Jenkinsfile under `templates/` (or `../pipeline-samples/`) demonstrating the change.
 5. Open a Pull Request — pipeline linting runs automatically on PR creation.
