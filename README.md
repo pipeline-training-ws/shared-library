@@ -101,7 +101,7 @@ End-to-end usage examples for the JFrog and Jira steps live in the sibling
 ## Prerequisites
 
 | Requirement | Notes |
-|---|---|
+| --- | --- |
 | Jenkins ≥ 2.387 / CloudBees CI | Declarative Pipeline support required |
 | Kubernetes plugin | Pod-based agents (`kubernetes { }` agent block) |
 | Pipeline Maven plugin | Required by `buildMaven` step |
@@ -116,7 +116,7 @@ End-to-end usage examples for the JFrog and Jira steps live in the sibling
 Configure the library once in **Manage Jenkins → System → Global Pipeline Libraries** (or at folder level in CloudBees CI):
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | Name | `shared-library` |
 | Default version | `main` |
 | SCM | Git — `https://github.com/pipeline-training-ws/shared-library.git` |
@@ -147,6 +147,16 @@ library identifier: "${env.SHAREDLIB_GIT_REPO}@${env.SHAREDLIB_GIT_TAG_}", retri
      credentialsId: "${env.SHAREDLIB_GIT_CREDENTIALS}"
     ])
 ```
+
+**Option 1 (Global / Folder Configuration) vs. Option 2 (Inline `library` Step)**
+
+| Dimension | Option 1: Global / Folder Configuration (`@Library`) | Option 2: Inline `library` Step (`library identifier: ...`) |
+| --- | --- | --- |
+| **Trusted vs. Untrusted** | **Trusted by Default:** Code runs in the main Groovy Sandbox bypass mode (full access to Java APIs, Jenkins internals, system calls). Safe when maintained by admins. | **Untrusted / Sandboxed:** Code runs strictly within the Groovy Sandbox by default. Restricted access unless explicit script approvals are granted. |
+| **Security Risk Profile** | **High Risk if Mismanaged:** A malicious or flawed update to the library can compromise the entire Jenkins controller. | **Low Risk / Restricted Scope:** Limits what execution threads can do, reducing blast radius if malicious code enters the library repo. |
+| **Caching Mechanism** | **Aggressive Caching:** Jenkins caches library code on the controller. Branches/tags load rapidly across multiple pipeline runs. | **Low / No Native Caching:** Fetches and clones the library repository dynamically per execution step, creating higher network and controller overhead. |
+| **Performance Overhead** | **Low:** Fast pipeline startup times due to pre-compiled scripts and internal caching. | **High:** Increased build latency from dynamic SCM checkouts every time the `library` step executes. |
+| **Governance & Control** | **Centralized:** Admins enforce permitted SCM locations, approved repositories, and credentials globally or per folder. | **Decentralized:** Pipelines can point to arbitrary Git repos or tags via environment variables unless guarded by admin policies. |
 
 ---
 
@@ -181,7 +191,7 @@ ci:
 **Stages**
 
 | Stage | Branch filter | What it does |
-|---|---|---|
+| --- | --- | --- |
 | CI / Load Config | all | Reads `configFile` via `readYaml(file: configFile).ci` |
 | CI / Hello World | all | `echo Hello <hello>` |
 | CI / Hi | `main` only | `echo Hi <firstName> <lastName>` |
@@ -212,7 +222,7 @@ def version = newSemanticVersion(arg: 'patch', version: '1.2.3')
 ```
 
 | Parameter | Description |
-|---|---|
+| --- | --- |
 | `arg` | Bump type: `major`, `minor`, or `patch` |
 | `version` | Current SemVer string (e.g. `1.2.3`) |
 
@@ -297,6 +307,7 @@ Located in `resources/podtemplates/`. Loaded directly via `libraryResource()` by
 | `agent.yaml` | `maven` (eclipse-temurin:21-jdk-alpine) | General-purpose Java/Maven build agent |
 
 The pod template follows Kubernetes security best practices:
+
 - `nodeSelector` + `tolerations` to pin workloads to dedicated agent nodes
 - `securityContext.runAsUser: 1000` / `fsGroup: 1000`
 - Explicit `resources.requests` and `resources.limits`
@@ -312,7 +323,7 @@ The pod template follows Kubernetes security best practices:
 ## Sample Usage
 
 | Path | Description |
-|---|---|
+| --- | --- |
 | [`sample-app-helloworld/`](https://github.com/pipeline-training-ws/sample-app-helloworld) | Resolves the library from `SHAREDLIB_GIT_*` env vars and calls `pipelineTemplateHelloWorld('ci-config.yaml')`, plus its own `ci-config.yaml` |
 | [`pipeline-samples/ci-jfrog-integration/`](https://github.com/pipeline-training-ws/pipeline-samples/tree/main/ci-jfrog-integration) | End-to-end Artifactory upload/download example using `jfrogUploadArtifact`/`jfrogDownloadArtifact` |
 | [`pipeline-samples/ci-jira-integration/`](https://github.com/pipeline-training-ws/pipeline-samples/tree/main/ci-jira-integration) | Automated Jira issue creation via `jiraCreateIssue` |
@@ -325,7 +336,7 @@ The pod template follows Kubernetes security best practices:
 Configure the following credentials in Jenkins / CloudBees CI before using the integration steps:
 
 | Credential ID | Type | Used by |
-|---|---|---|
+| --- | --- | --- |
 | `jfrog-user-token` | Secret text | `jfrogUploadArtifact`, `jfrogDownloadArtifact` |
 | `jira-user-token` | Username / Password | `jiraCreateIssue` |
 
