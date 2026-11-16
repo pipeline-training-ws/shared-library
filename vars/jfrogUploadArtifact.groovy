@@ -1,5 +1,3 @@
-package vars
-
 def call(Map config=[:]) {
     withCredentials([string(credentialsId: 'jfrog-user-token', variable: 'API_TOKEN')]) {
         // Bind config values as env vars and use a single-quoted sh script: the shell
@@ -11,8 +9,11 @@ def call(Map config=[:]) {
             "ARTIFACT_PATH=${config.ARTIFACT_PATH}",
             "FILE_PATH=${config.FILE_PATH}"
         ]) {
+            // --fail: HTTP 4xx/5xx fails the step instead of passing silently
             sh '''
-                curl -H "Authorization: Bearer $API_TOKEN" -T "$FILE_PATH" "$ARTIFACTORY_URL/artifactory/$REPO_NAME/$ARTIFACT_PATH"
+                curl --fail --silent --show-error --retry 3 --retry-connrefused \\
+                     -H "Authorization: Bearer $API_TOKEN" -T "$FILE_PATH" \\
+                     "$ARTIFACTORY_URL/artifactory/$REPO_NAME/$ARTIFACT_PATH"
             '''
         }
     }

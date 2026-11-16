@@ -1,4 +1,8 @@
 def call (Map config) {
+    // Test reports are published in finally so they exist even when a Maven step fails.
+    // NOTE: pipeline-maven's withMaven may publish JUnit results itself depending on plugin
+    // version/config; check for duplicate reports before keeping the explicit junit step.
+    try {
         //https://plugins.jenkins.io/pipeline-maven/
         withMaven(
                 //Use `$WORKSPACE/.repository` for local repository folder to avoid shared repositories
@@ -10,16 +14,18 @@ def call (Map config) {
                 // or globally to the entire master navigating to  "Manage Jenkins / Global Tools Configuration"
                 //mavenSettingsConfig: 'global-maven-settings'
         ) {
-            //sh config.ci.maven.steps[1]
-            script {
-                config.ci.maven.steps.collect { step ->
-                    println step
-                    sh step
-                }
+            // plain for loop: closures that call steps (e.g. inside .collect) are a CPS risk
+            // NOTE: steps come from the consumer's ci-config.yaml and run as shell commands by design;
+            // restrict them (e.g. allow-list of Maven goals) if consumers are not trusted.
+            for (String mavenStep : config.ci.maven.steps) {
+                echo "maven step: ${mavenStep}"
+                sh mavenStep
             }
             //https://docs.cloudbees.com/docs/cloudbees-ci/latest/pipelines/cloudbees-cache-step
             //writeCache name: 'maven-repo', includes: '.m2/repository/**', excludes: '**SNAPSHOT**'
         }
-        junit '**/target/surefire-reports/TEST-*.xml'
-        archiveArtifacts '**/target/*.war'
+    } finally {
+        junit allowEmptyResults: true, testResults: '**/target/surefire-reports/TEST-*.xml'
+    }
+    archiveArtifacts '**/target/*.war'
 }

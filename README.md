@@ -86,7 +86,11 @@ shared-library/
 │   └── helloWorld.groovy
 └── resources/                     # Non-Groovy resources accessed via libraryResource()
     ├── podtemplates/
-    │   └── agent.yaml             # single-container (maven) pod template
+    │   ├── agent.yaml             # single-container (maven) pod template
+    │   └── curl.yaml              # single-container (curl) pod template
+└── examples/                      # not loaded by the library: reference scripts / unused steps
+    ├── getGitBranches.groovy, initPodTemplate.groovy
+    ├── jfrog/, jira/              # standalone shell variants of the JFrog/Jira steps
     └── newSemanticVersion/        # semantic versioning shell script, used by newSemanticVersion.groovy
 ```
 
@@ -118,7 +122,7 @@ Configure the library once in **Manage Jenkins → System → Global Pipeline Li
 | Field | Value |
 | --- | --- |
 | Name | `shared-library` |
-| Default version | `main` |
+| Default version | `v1.0.0` (create and push this tag; do not use a moving branch) |
 | SCM | Git — `https://github.com/pipeline-training-ws/shared-library.git` |
 
 Then reference it implicitly from any Jenkinsfile (auto-loaded), or explicitly:
@@ -138,7 +142,7 @@ for the full pattern:
 env.SHAREDLIB_GIT_SERVER = env.SHAREDLIB_GIT_SERVER ?: "https://github.com"
 env.SHAREDLIB_GIT_ORG = env.SHAREDLIB_GIT_ORG ?: "pipeline-training-ws"
 env.SHAREDLIB_GIT_REPO = env.SHAREDLIB_GIT_REPO ?: "shared-library"
-env.SHAREDLIB_GIT_TAG_ = env.SHAREDLIB_GIT_TAG ?: "main"
+env.SHAREDLIB_GIT_TAG_ = env.SHAREDLIB_GIT_TAG ?: "v1.0.0"
 env.SHAREDLIB_GIT_CREDENTIALS = env.SHAREDLIB_GIT_CREDENTIALS ?: "gh-pat"
 
 library identifier: "${env.SHAREDLIB_GIT_REPO}@${env.SHAREDLIB_GIT_TAG_}", retriever: modernSCM(
@@ -304,12 +308,15 @@ Located in `resources/podtemplates/`. Loaded directly via `libraryResource()` by
 
 | File | Containers | Purpose |
 |---|---|---|
-| `agent.yaml` | `maven` (eclipse-temurin:21-jdk-alpine) | General-purpose Java/Maven build agent |
+| `agent.yaml` | `maven` (maven:3.9.9-eclipse-temurin-21) | General-purpose Java/Maven build agent |
+| `curl.yaml` | `curl` (curlimages/curl:8.10.1) | Lightweight agent for the JFrog/Jira steps |
 
 The pod template follows Kubernetes security best practices:
 
 - `nodeSelector` + `tolerations` to pin workloads to dedicated agent nodes
-- `securityContext.runAsUser: 1000` / `fsGroup: 1000`
+- `runAsNonRoot`, `runAsUser: 1000` / `fsGroup: 1000`, `seccompProfile: RuntimeDefault`, `allowPrivilegeEscalation: false`, all capabilities dropped
+- `automountServiceAccountToken: false` (add a dedicated ServiceAccount when one exists)
+- Pinned image tags (use digests in production); memory request = limit
 - Explicit `resources.requests` and `resources.limits`
 
 ### Integration Scripts

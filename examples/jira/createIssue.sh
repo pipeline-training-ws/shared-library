@@ -1,12 +1,12 @@
 #! /bin/bash
-set -x
+set -euo pipefail
 
 JIRA_KEY=${1:-"SCRUM"}
 JIRA_ISSUE_TYPE=${2:-"Task"}
 JIRA_DESCRIPTION=${3:-"MY ISSUE DESCRIPTION"}
 JIRA_SUMMARY=${4:-"MY ISSUE SUMMARY"}
 JIRA_URL=${5:-"https://jira.atlassian.net/"}
-JIRA_TOKEN=${6:-"USER:TOKEN"}
+: "${JIRA_TOKEN:?export JIRA_TOKEN (user:token) in the environment; do not pass it as an argument}"
 JIRA_ASSIGNEE=${7:-}
 
 # Build the JSON with jq --arg instead of a heredoc so JIRA_SUMMARY/JIRA_DESCRIPTION
@@ -22,4 +22,4 @@ jq -n \
   > createIssue.json
 
 cat createIssue.json
-curl -D- -u "$JIRA_TOKEN" -X POST --data @createIssue.json -H "Content-Type: application/json" "$JIRA_URL/rest/api/2/issue"
+printf 'Authorization: Basic %s\n' "$(printf '%s' "$JIRA_TOKEN" | base64 | tr -d '\n')" | curl --fail --silent --show-error -D- -H @- -X POST --data @createIssue.json -H "Content-Type: application/json" "$JIRA_URL/rest/api/2/issue"

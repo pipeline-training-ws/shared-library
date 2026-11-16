@@ -1,6 +1,9 @@
 apiVersion: v1
 kind: Pod
 spec:
+  # Build code does not need Kubernetes API access. Add serviceAccountName with a dedicated,
+  # RoleBinding-free ServiceAccount once one exists in the agent namespace.
+  automountServiceAccountToken: false
   nodeSelector:
     workload: agent
   tolerations:
@@ -9,20 +12,30 @@ spec:
     value: agent
     effect: NoSchedule
   securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
     fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: maven
-    image: docker.io/library/eclipse-temurin:21-jdk-alpine
+    # Pinned tag (use a digest in production); an image that contains mvn and bash.
+    image: maven:3.9.9-eclipse-temurin-21
     command:
     - sleep
     args:
     - infinity
+    # Memory request = limit (CloudBees KB guidance); CPU limit kept to satisfy a "requests and limits" policy.
     resources:
       requests:
         cpu: "500m"
-        memory: "512Mi"
+        memory: "1Gi"
       limits:
         cpu: "1"
         memory: "1Gi"
     securityContext:
-      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL

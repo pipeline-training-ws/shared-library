@@ -14,7 +14,7 @@ def call(String configFile) {
             stage('CI') {
                 agent {
                     kubernetes {
-                        //use the yaml file ref from ci-user-config, rendered with the configured images
+                        // static pod template from the library resources (no image rendering)
                         yaml libraryResource("podtemplates/agent.yaml")
                         //TODO: RENAME DEFAULT CONTAONER
                         defaultContainer "maven"
@@ -32,7 +32,8 @@ def call(String configFile) {
                     }
                     stage("Hello World") {
                         steps {
-                            sh "echo Hello ${config.hello}"
+                            // echo step, not sh: config values come from the app repo and must not reach a shell
+                            echo "Hello ${config.hello}"
                         }
                     }
                     stage("Hi") {
@@ -45,7 +46,7 @@ def call(String configFile) {
                             }
                         }
                         steps {
-                            sh "echo Hi ${config.firstName}  ${config.lastName}"
+                            echo "Hi ${config.firstName}  ${config.lastName}"
                         }
                     }
                 }

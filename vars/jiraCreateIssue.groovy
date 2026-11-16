@@ -17,9 +17,15 @@ def call(Map config=[:]) {
         withEnv(["JIRA_URL=${config.JIRA_URL}"]) {
             // Single-quoted sh: values are resolved by the shell from env, not
             // interpolated into the script text, so they can't be re-parsed as shell syntax.
+            // The Basic auth header is passed on stdin (-H @-, curl 7.55+) so the password
+            // never appears in the curl argument vector. --fail makes HTTP errors fail the step.
             sh '''
+                set +x
                 cat createIssue.json
-                curl -D- -o createIssueResult.json -u "$JIRA_USER:$JIRA_PW" -X POST --data @createIssue.json -H "Content-Type: application/json" "$JIRA_URL/rest/api/2/issue"
+                printf 'Authorization: Basic %s\\n' "$(printf '%s:%s' "$JIRA_USER" "$JIRA_PW" | base64 | tr -d '\\n')" \\
+                  | curl --fail --silent --show-error --retry 3 -D- -o createIssueResult.json \\
+                      -H @- -H "Content-Type: application/json" \\
+                      -X POST --data @createIssue.json "$JIRA_URL/rest/api/2/issue"
             '''
         }
         archiveArtifacts artifacts: '*.*', followSymlinks: false
